@@ -1,0 +1,74 @@
+---
+title: "Assignment 2"
+author: "Laura Fusi"
+date: "2023-03-03"
+output: html_document
+---
+
+# 1. Using AnnotationHub, find and download the following annotations data
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(ensembldb)
+  library(GenomicRanges)
+  library(epiwraps)
+}) 
+
+ah <- AnnotationHub()
+# display(ah)
+```
+
+## The mouse (Mus Musculus) EnsDb object, version 102, genome build GRCm38
+```{r}
+mus_musculus <- query(ah, c("Mus Musculus", "ensembl", "GRCm38", "version 102"))
+mus_musculus
+
+mus_musculus_object <- ah[["AH89211"]]
+mus_musculus_object
+```
+
+## The mouse genome sequence ( dna_sm ) in TwoBit/2bit format for GRCm38
+```{r}
+mus_musculus_seq <- query(ah, c("Mus Musculus", "GRCm38", "dna_sm", "2bit"))
+mus_musculus_seq
+
+mus_musculus_seq_object <- ah[["AH88477"]]
+mus_musculus_seq_object
+```
+
+## The drosophila melanogaster genome sequence ( dna_sm ) in TwoBit/2bit format for BDGP6
+```{r}
+drosophila <- query(ah, c("Drosophila Melanogaster", "BDGP6", "dna_sm", "2bit"))
+drosophila
+
+drosophila_object <- ah[["AH106160"]]
+drosophila_object
+```
+
+# 2. Using the mouse EnsDb, find the following
+
+## How many different ensembl gene IDs and gene symbols are there for protein-coding genes?
+```{r}
+# used supportedFilters() to find the correct filter
+g <- genes(mus_musculus_object, filter = GeneBiotypeFilter("protein_coding"))
+length(unique(g$gene_id))
+```
+
+## Plot the distribution of the (spliced) length of protein-coding transcripts
+(tip: this will require you to extract exons of protein-coding transcripts from the database, and split them by transcript, before summing the width of the exons of each transcript)
+```{r}
+# extract exons of protein-coding transcripts from the database and split them by transcript
+exsPerTx <- exonsBy(mus_musculus_object, column=c("tx_id","tx_biotype"), filter=TxBiotypeFilter("protein_coding"))
+# summing the width of the exons of each transcript
+spliced_length <- sum(width(exsPerTx))
+hist(spliced_length, breaks=150, main = "Distribution of the (spliced) length of protein-coding transcripts", xlab = "Spliced length")
+
+```
+# Session information
+
+```{r}
+sessionInfo()
+
+```
+
