@@ -1,0 +1,84 @@
+---
+title: "Assignment 3"
+author: "Laura Fusi"
+date: "2023-03-10"
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(Rsubread)
+  library(rtracklayer)
+  library(Biostrings)
+  library(Rfastp)
+  library(epiwraps)
+})
+ah <- AnnotationHub()
+```
+
+# Download the following Drosophila ChIP-seq for the protein CTCF
+
+* https://www.encodeproject.org/files/ENCFF127RRR/@@download/ENCFF127RRR.fastq.gz
+* (no input control for the purpose of this exercise)
+
+```{r, eval=FALSE}
+options(timeout=3600)
+dir.create("raw")
+download.file("https://www.encodeproject.org/files/ENCFF127RRR/@@download/ENCFF127RRR.fastq.gz", dest="raw/CTCF.fastq.gz")
+```
+
+# Process it from the raw data, obtaining
+
+## bam file 
+
+```{r}
+# Trimming
+dir.create("rfastp.trimmed")
+qc <- lapply(c(CTCF="raw/CTCF.fastq.gz"), FUN=function(x){
+  Rfastp::rfastp(x, thread=4, overrepresentationAnalysis=TRUE,
+                 outputFastq=file.path("rfastp.trimmed/",gsub("\\.fastq\\.gz$","",basename(x))))
+})
+# Indexing
+genome <- ah[["AH49674"]]
+dir.create("BDGP6_genome") 
+export(import.2bit(genome), "BDGP6_genome/genome.fasta.gz", compress=TRUE) 
+Rsubread::buildindex("BDGP6_genome/rsubread", reference="BDGP6_genome/genome.fasta.gz")
+# Alignment
+dir.create("aligned")
+align.stats <- Rsubread::align(index="BDGP6_genome/rsubread", type="dna", 
+                               readfile1=c("rfastp.trimmed/CTCF_R1.fastq.gz"), 
+                               output_file=c("aligned/CTCF.bam"),
+                               nthreads=6, sortReadsByCoordinates=TRUE)
+```
+
+## peaks
+
+```{r}
+peaks <- callPeaks("aligned/CTCF.bam", fragLength=50L)
+peaks
+```
+
+# Report
+
+## how many reads (and what percentage) were mapped
+
+3504769 reads were mapped, which corresponds to a percentage of 91.8%.
+
+## how many peaks were found
+
+2857 peaks were found.
+
+# Plot the signal around one of the peaks
+
+```{r}
+head(peaks)
+region <- as.character(granges(peaks[26]))
+plotSignalTracks(c(CTCF="aligned/CTCF.bam"), region=region)
+```
+
+# Session information
+
+```{r}
+sessionInfo()
+```
