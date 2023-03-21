@@ -1,0 +1,127 @@
+---
+title: "Assignment 4"
+author: "Laura Fusi"
+date: "2023-03-17"
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(rtracklayer)
+  library(epiwraps)
+  library(GenomicRanges)
+})
+ah <- AnnotationHub()
+```
+
+# Find and download from ENCODE the peaks (i.e. bed-like format) for the following histone modifications and transcription factors in mouse embryonic stem cells (mESC):
+ENCODE: https://www.encodeproject.org/search/?type=Experiment&control_type!=*&status=released 
+(when there are replicates, we recommend using the bed file denoted as “conservative IDR thresholded peaks”)
+
+## p300
+https://www.encodeproject.org/files/ENCFF653YVR/
+
+```{r}
+download.file("https://www.encodeproject.org/files/ENCFF653YVR/@@download/ENCFF653YVR.bed.gz", dest="p300.bed.gz")
+p300_peaks <- rtracklayer::import("p300.bed.gz", format="narrowPeak")
+p300_peaks
+```
+There are in total 28341 peaks.
+
+## H3K4me3
+
+https://www.encodeproject.org/files/ENCFF247GVM/
+
+```{r}
+download.file("https://www.encodeproject.org/files/ENCFF247GVM/@@download/ENCFF247GVM.bed.gz", dest="H3K4me3.bed.gz")
+H3K4me3_peaks <- rtracklayer::import("H3K4me3.bed.gz", format="narrowPeak")
+```
+
+## H3K4me1
+
+https://www.encodeproject.org/files/ENCFF333IJH/
+
+```{r}
+download.file("https://www.encodeproject.org/files/ENCFF333IJH/@@download/ENCFF333IJH.bed.gz", dest="H3K4me1.bed.gz")
+H3K4me1_peaks <- rtracklayer::import("H3K4me1.bed.gz", format="narrowPeak")
+```
+
+## H3K27ac
+
+https://www.encodeproject.org/files/ENCFF360VIS/
+
+```{r}
+download.file("https://www.encodeproject.org/files/ENCFF360VIS/@@download/ENCFF360VIS.bed.gz", dest="H3K27ac.bed.gz")
+H3K27ac_peaks <- rtracklayer::import("H3K27ac.bed.gz", format="narrowPeak")
+```
+
+## H3K27me3
+
+https://www.encodeproject.org/files/ENCFF008XKX/ 
+
+```{r}
+download.file("https://www.encodeproject.org/files/ENCFF008XKX/@@download/ENCFF008XKX.bed.gz", dest="H3K27me3.bed.gz")
+H3K27me3_peaks <- rtracklayer::import("H3K27me3.bed.gz", format="narrowPeak")
+```
+
+# Of the p300 peaks, what proportion overlap each of the marks?
+
+## H3K4me3
+
+```{r}
+p300OverlapsH3K4me3 <- overlapsAny(p300_peaks, H3K4me3_peaks)
+table(p300OverlapsH3K4me3)
+```
+Of the 24596 p300 peaks, 8742 overlap with H3K4me3 marks.
+
+```{r}
+table(p300OverlapsH3K4me3)[2]/(table(p300OverlapsH3K4me3)[1]+table(p300OverlapsH3K4me3)[2])
+```
+This corresponds to ca. 35.5%.
+
+## H3K4me1
+
+```{r}
+p300OverlapsH3K4me1 <- overlapsAny(p300_peaks, H3K4me1_peaks)
+table(p300OverlapsH3K4me1)
+```
+Of the 24596 p300 peaks, 6905 overlap with H3K4me1 marks.
+
+```{r}
+table(p300OverlapsH3K4me1)[2]/(table(p300OverlapsH3K4me1)[1]+table(p300OverlapsH3K4me1)[2])
+```
+This corresponds to ca. 28.1%.
+
+## H3K27ac
+
+```{r}
+p300OverlapsH3K27ac <- overlapsAny(p300_peaks, H3K27ac_peaks)
+table(p300OverlapsH3K27ac)
+```
+Of the 24596 p300 peaks, 13502 overlap with H3K27ac marks.
+
+```{r}
+table(p300OverlapsH3K27ac)[2]/(table(p300OverlapsH3K27ac)[1]+table(p300OverlapsH3K27ac)[2])
+```
+This corresponds to ca. 54.9%.
+
+## H3K27me3
+
+```{r}
+p300OverlapsH3K27me3 <- overlapsAny(p300_peaks, H3K27me3_peaks)
+table(p300OverlapsH3K27me3)
+```
+Of the 24596 p300 peaks, 56 overlap with H3K27me3 marks.
+
+```{r}
+table(p300OverlapsH3K27me3)[2]/(table(p300OverlapsH3K27me3)[1]+table(p300OverlapsH3K27me3)[2])
+```
+This corresponds to ca. 0.2%.
+
+# Session information
+
+```{r}
+sessionInfo()
+```
+
