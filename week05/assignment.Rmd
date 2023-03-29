@@ -1,0 +1,98 @@
+---
+title: "Assignment 5"
+author: "Laura Fusi"
+date: "2023-03-24"
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(ensembldb)
+  library(GenomicRanges)
+  library(epiwraps)
+  library(rtracklayer)
+  library(ggplot2)
+})
+ah <- AnnotationHub()
+```
+
+# Using the peaks you downloaded last week, identify bivalent domains (H3K27me3 + H3K4me3) in mouse embryonic stem cells (mESC)
+
+There I downloaded and imported the same data as last week:
+```{r}
+# Download and import
+dir.create("mESC")
+download.file("https://www.encodeproject.org/files/ENCFF247GVM/@@download/ENCFF247GVM.bed.gz", dest="mESC/H3K4me3.bed.gz")
+H3K4me3_peaks <- rtracklayer::import("mESC/H3K4me3.bed.gz", format="narrowPeak")
+download.file("https://www.encodeproject.org/files/ENCFF008XKX/@@download/ENCFF008XKX.bed.gz", dest="mESC/H3K27me3.bed.gz")
+H3K27me3_peaks <- rtracklayer::import("mESC/H3K27me3.bed.gz", format="narrowPeak")
+```
+There I plotted these marks to see how often they are present together:
+```{r}
+px <- c()
+px$H3K4me3_peaks <- H3K4me3_peaks
+px$H3K27me3_peaks <- H3K27me3_peaks
+regionUpset(px)
+```
+There I created a subset containing all H3K4me3 peak regions that overlap with H3K27me3 peak regions:
+```{r}
+p <- overlapsAny(H3K4me3_peaks, H3K27me3_peaks)
+subset <- H3K4me3_peaks[p[TRUE]]
+subset
+```
+
+# Question: what happens to those regions upon differentiation?
+
+## Choose a differentiated cell type (e.g. hepatocytes, neural progenitor, or smooth muscle cells)
+
+I chose the myoblasts.
+
+## Download the H3K27me3 and H3K4me3 peaks from this cell type
+
+There I downloaded and imported the myoblast peak regions of the marks H3K4me3 and H3K27me3:
+```{r}
+dir.create("myo")
+download.file("https://www.encodeproject.org/files/ENCFF360QRN/@@download/ENCFF360QRN.bed.gz", dest="myo/H3K4me3_myo.bed.gz")
+H3K4me3_myo_peaks <- rtracklayer::import("myo/H3K4me3_myo.bed.gz", format="narrowPeak")
+download.file("https://www.encodeproject.org/files/ENCFF071FEL/@@download/ENCFF071FEL.bed.gz", dest="myo/H3K27me3_myo.bed.gz")
+H3K27me3_myo_peaks <- rtracklayer::import("myo/H3K27me3_myo.bed.gz", format="narrowPeak")
+```
+
+## How many of the mESC bivalent domains are, in this differentiated cell type, overlapping either mark or their combination?
+
+There I imported the peak files for myoblasts in a unique variable and I gave them meaningful names:
+```{r}
+peakfiles_myo <- list.files("myo", full.names	= TRUE)  
+names(peakfiles_myo) <- peakfiles_myo
+names(peakfiles_myo) <- gsub("\\.bed.gz","",basename(peakfiles_myo))
+peaks_myo <- lapply(peakfiles_myo, FUN= rtracklayer::import, format="narrowPeak") 
+```
+
+There I created a subset containing all H3K4me3 peak regions that overlap with H3K27me3 peak regions for myoblasts:
+```{r}
+pm <- overlapsAny(H3K4me3_myo_peaks, H3K27me3_myo_peaks)
+subsetm <- H3K4me3_myo_peaks[p[TRUE]]
+subsetm
+```
+
+There I created a variable including the subset that I created in the first part and the myoblast peaks for the regions needed, so that I could use it for the plots.
+```{r}
+peaksforplot <- peaks_myo
+peaksforplot$subset <- subset
+```
+
+```{r}
+lapply(peaks_myo, FUN=function(x) sum(overlapsAny(subset,x)))
+sum(overlapsAny(subset, subsetm))
+```
+These numbers, as well as those in the plot just below, show that of the bivalent domains in mESC, 1593 are overlapping with H3K27me3 regions in myoblasts and 1198 are overlapping with H3K4me3 regions. 94 regions in the mESC subset are overlapping with regions in the myoblast subset.
+
+```{r}
+regionOverlaps(peaksforplot)
+```
+There I created a plot showing the size of the intersection of different regions: 
+```{r}
+regionUpset(peaksforplot)
+```
+This last plot, as well as the numbers above, show that differentiated cells have mostly either one mark or the other one in a certain region, while only a few regions still have both marks. Many of these regions do not correspond to those in the mESC subset.
