@@ -1,0 +1,155 @@
+---
+title: "Assignment 7"
+author: "Laura Fusi"
+date: "2023-04-21"
+output: html_document
+---
+
+# In the same dataset of ATAC on chr19, plot the insertion (i.e. ‘cuts’) profile of, respectively, nucleosome-free and nucleosome-containing fragments, around the high-confidence motifs of two factors.
+* You can choose your own factors of interest, or for instance use GATA1, REST and/ or the glucocorticoid receptor (search “GCR”)
+    * Suggested: KLF4, MAZ or FOXD3
+* Expected form of the answer: 2 figures (one for each factor), each containing the two signals around the motifs
+
+```{r}
+# Import libraries
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(GenomicRanges)
+  library(ggplot2)
+  # library(memes) # for the meme-based methods -- COMMENT OUT when using alternatives
+  library(motifmatchr)
+  library(Biostrings) # for handling sequences
+  library(MotifDb) # database of motifs
+  library(TFBSTools) # for handling some motif formats
+  library(universalmotif) # for converting motifs to various formats
+  library(PWMEnrich) # for R-based motif enrichment analysis
+  library(epiwraps)
+  library(ensembldb)
+  library(Rsamtools)
+  })
+```
+
+```{r, eval=FALSE}
+# Download the dataset of ATAC on chr19
+options(timeout=3600)
+download.file("https://ethz-ins.org/content/w7/atac.chr19.bam", "atac.chr19.bam", mode="wb")
+download.file("https://ethz-ins.org/content/w7/atac.chr19.bam.bai", "atac.chr19.bam.bai", mode="wb")
+```
+
+```{r}
+bam <- "atac.chr19.bam"
+
+# create a track using all fragments, computing the coverage at each position (and force Ensembl naming)
+bam2bw(bam, output_bw = "full_cov.bw", paired=TRUE, binWidth=10L, forceSeqlevelsStyle = "Ensembl") 
+
+# create a track using all fragments, but computing the number of cuts/insertion sites at each position
+epiwraps::bam2bw(bam, output_bw = "full_cuts.bw", paired=TRUE, binWidth=1L, type="ends", 
+                 shift=c(4L,-5L), forceSeqlevelsStyle = "Ensembl")
+
+# create a track using only nucleosome-free fragments, the number of cuts/insertion sites at each position 
+bam2bw(bam, output_bw = "NF_cuts.bw", paired=TRUE, binWidth=1L, type="ends", minFragLength=30, 
+       maxFragLength=120, shift=c(4L,-5L), forceSeqlevelsStyle = "Ensembl")
+
+# create a track using only mono-nucleosome fragments, computing coverage
+bam2bw(bam, output_bw = "mono_cov.bw", paired=TRUE, binWidth=10L, minFragLength=140,
+       maxFragLength=220, forceSeqlevelsStyle = "Ensembl")
+
+# create a track using only mono-nucleosome fragments, computing centers 
+bam2bw(bam, output_bw = "mono_centers.bw", paired=TRUE, binWidth=5L, minFragLength=140,
+       maxFragLength=220, type="center", forceSeqlevelsStyle = "Ensembl")
+
+# create a track using only mono-nucleosome fragments, computing the number of cuts/insertion sites at each position 
+bam2bw(bam, output_bw = "mono_cuts.bw", paired=TRUE, binWidth=1L, type="ends", minFragLength=140, 
+       maxFragLength=220, shift=c(4L,-5L), forceSeqlevelsStyle = "Ensembl")
+```
+
+```{r}
+ah <- AnnotationHub(localHub=TRUE)
+genome <- ah[["AH68356"]]
+# get the sequence for chr19:
+chr19 <- import(genome)["19"] # import the whole genome sequence from chromosome 19
+
+# get KLF4 motif
+motifr <- query(MotifDb, c("KLF4","Mus"))[[1]]
+motifr2 <- convert_motifs(motifr, class="TFBSTools-PFMatrix")
+
+# find motif occurrences
+# here we could use any of the 3 methods we've seen: memes::runFimo, findMotifInstances, or this:
+moir <- motifmatchr::matchMotifs(motifr2, chr19, out="positions", p.cutoff=1e-5)[[1]]
+# convert to GRanges (when using motifmatchr)
+moir <- as(setNames(moir,names(chr19)), "GRanges")
+```
+
+```{r}
+# get MAZ motif
+motift <- query(MotifDb, c("MAZ","Mus"))[[1]]
+motift2 <- convert_motifs(motift, class="TFBSTools-PFMatrix")
+
+# find motif occurrences
+# here we could use any of the 3 methods we've seen: memes::runFimo, findMotifInstances, or this:
+moit <- motifmatchr::matchMotifs(motift2, chr19, out="positions", p.cutoff=1e-5)[[1]]
+# convert to GRanges (when using motifmatchr)
+moit <- as(setNames(moit,names(chr19)), "GRanges")
+```
+
+```{r}
+# Plot KLF4
+tracks <- c("Full coverage"="full_cov.bw", "NF coverage"="NF_cov.bw", "All cuts"="full_cuts.bw",
+            "NF cuts"="NF_cuts.bw", "Mono cov"="mono_cov.bw", "Mono centers"="mono_centers.bw", "Mono cuts"="mono_cuts.bw")
+# extract signals around the motif occurences
+# we zoom in to 500bp around the motif centers, in windows of 5bp
+sm <- signal2Matrix(tracks, moir, w=5, extend=500) # looks at the given regions and at the signal around the different files 
+
+# background normalization --> assumption: noise is always the same --> can remove background
+# this we can do for instance using:
+nf <- bwNormFactors(tracks, wsize=5L, useSeqLevels="19", nwind=5000L)
+# then we apply the normalization factors:
+smb <- rescaleSignalMatrices(sm, nf)
+plotEnrichedHeatmaps(smb, trim=0.95,colors = c("white", "blue"))
+```
+
+```{r}
+# Plot KLF4 --> only requested plots, to see them better
+tracks2 <- c("NF cuts"="NF_cuts.bw", "Mono cuts"="mono_cuts.bw")
+# extract signals around the motif occurences
+# we zoom in to 500bp around the motif centers, in windows of 5bp
+sm2 <- signal2Matrix(tracks2, moir, w=5, extend=500) # looks at the given regions and at the signal around the different files 
+
+# background normalization --> assumption: noise is always the same --> can remove background
+# this we can do for instance using:
+nf2 <- bwNormFactors(tracks2, wsize=5L, useSeqLevels="19", nwind=5000L)
+# then we apply the normalization factors:
+smb2 <- rescaleSignalMatrices(sm2, nf2)
+plotEnrichedHeatmaps(smb2, trim=0.95,colors = c("white", "blue"))
+```
+
+```{r}
+# Plot MAZ
+tracks <- c("Full coverage"="full_cov.bw", "NF coverage"="NF_cov.bw", "All cuts"="full_cuts.bw",
+            "NF cuts"="NF_cuts.bw", "Mono cov"="mono_cov.bw", "Mono centers"="mono_centers.bw", "Mono cuts"="mono_cuts.bw")
+# extract signals around the motif occurences
+# we zoom in to 500bp around the motif centers, in windows of 5bp
+sm <- signal2Matrix(tracks, moit, w=5, extend=500) # looks at the given regions and at the signal around the different files 
+
+# background normalization --> assumption: noise is always the same --> can remove background
+# this we can do for instance using:
+nf <- bwNormFactors(tracks, wsize=5L, useSeqLevels="19", nwind=5000L)
+# then we apply the normalization factors:
+smb <- rescaleSignalMatrices(sm, nf)
+plotEnrichedHeatmaps(smb, trim=0.95,colors = c("white", "blue"))
+```
+
+```{r}
+# Plot MAZ --> only requested plots, to see them better
+tracks2 <- c("NF cuts"="NF_cuts.bw", "Mono cuts"="mono_cuts.bw")
+# extract signals around the motif occurences
+# we zoom in to 500bp around the motif centers, in windows of 5bp
+sm2 <- signal2Matrix(tracks2, moit, w=5, extend=500) # looks at the given regions and at the signal around the different files 
+
+# background normalization --> assumption: noise is always the same --> can remove background
+# this we can do for instance using:
+nf2 <- bwNormFactors(tracks2, wsize=5L, useSeqLevels="19", nwind=5000L)
+# then we apply the normalization factors:
+smb2 <- rescaleSignalMatrices(sm2, nf2)
+plotEnrichedHeatmaps(smb2, trim=0.95,colors = c("white", "blue"))
+```
