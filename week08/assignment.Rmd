@@ -1,0 +1,218 @@
+---
+title: "Assignment 8"
+author: "Laura Fusi"
+date: "2023-04-28"
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(GenomicRanges)
+  library(Biostrings)
+  library(AnnotationHub)
+  library(epiwraps)
+  library(motifmatchr)
+  library(MotifDb)
+  library(universalmotif)
+  library(sechm)
+  library(BiocParallel)
+  library(ggplot2)
+  library(chromVAR) # for motif accessibility estimation
+  library(SummarizedExperiment) # data structure
+  library(limma) # for statistical analysis
+  library(BSgenome.Mmusculus.UCSC.mm10)
+  library(stats)
+})
+# to control multithreading, unix users can use:
+# register(MulticoreParam(4))
+# for windows users, rather one of the following:
+# register(SerialParam())
+register(SnowParam(2))
+```
+
+# Download ATAC-seq peak counts in the hippocampus upon stress (subset of the original data, already in SummarizedExperiment format) :
+
+* https://ethz-ins.org/content/mouse_mm38_hippocampus.peakCounts.SE.rds
+
+```{r, eval=FALSE}
+# Download the file and read it
+options(timeout=6000)
+download.file("https://ethz-ins.org/content/mouse_mm38_hippocampus.peakCounts.SE.rds", "mouse_mm38_hippocampus.peakCounts.SE.rds", mode="wb")
+
+```
+
+```{r}
+peak_counts_SE <- readRDS("mouse_mm38_hippocampus.peakCounts.SE.rds")
+peak_counts_SE
+
+# import genome
+#ah <- AnnotationHub(localHub=TRUE)
+#genome <- ah[["AH68356"]]
+#Biostrings::writeXStringSet(rtracklayer::import(genome), "genome.fa")
+genome_fa <- Rsamtools::FaFile("genome.fa")
+```
+
+# Using this object, perform a chromVAR motif analysis, and run 2 differential motif accessibility analyses, respectively:
+
+```{r}
+# Get the database of motifs
+motifs <- query(MotifDb, c("HOCOMOCOv10", "Mmusculus"))
+motifs <- do.call(TFBSTools::PWMatrixList, setNames(
+           universalmotif::convert_motifs(motifs, class="TFBSTools-PWMatrix"),
+           mcols(motifs)$providerName))
+```
+
+## comparing stressed (denoted ‘FSS’ – forced swim stress) and control animals
+
+```{r}
+genome <- BSgenome.Mmusculus.UCSC.mm10::BSgenome.Mmusculus.UCSC.mm10 # because I had windows-related problems with the other genome
+seqlevelsStyle(peak_counts_SE) = "UCSC"
+se <- suppressWarnings(chromVAR::addGCBias(peak_counts_SE, genome=genome))
+moi <- suppressWarnings(motifmatchr::matchMotifs(motifs, subject=se, genome=genome))
+
+se
+colData(se)$condition <- c("CTRL","CTRL","CTRL","CTRL","CTRL","CTRL","FSS","FSS","FSS","FSS","FSS","FSS")
+se$condition <- c("CTRL","CTRL","CTRL","CTRL","CTRL","CTRL","FSS","FSS","FSS","FSS","FSS","FSS")
+colData(se)
+rowRanges(se)$test <- 3
+rowRanges(se)
+
+#moi <- motifmatchr::matchMotifs(motifs, subject=peak_counts_SE, genome=genome_fa)
+dev <- chromVAR::computeDeviations(object = se, annotations=moi,
+                                   background_peaks=getBackgroundPeaks(se, niterations=1000))
+dev
+colData(dev)
+variability <- computeVariability(dev)
+plotVariability(variability)
+
+head(assays(dev)$z)
+assays(dev)$norm <- scale(assays(dev)$z)
+dev
+
+# differential analysis
+dev$condition
+# if needed, we can specify the baseline condition, by default it's the first in alphabetical order
+dev$condition <- factor(dev$condition)
+dev$condition <- relevel(dev$condition, "CTRL")
+mm <- model.matrix(~dev$condition)
+
+fit <- eBayes(lmFit(assays(dev)$norm, mm))
+res <- as.data.frame(topTable(fit, coef="dev$conditionFSS", number = Inf))
+head(res)
+
+res$TF <- row.names(res)
+ggplot(res, aes(logFC, -log10(adj.P.Val), label=TF)) + geom_text()
+
+sechm(dev, features = head(row.names(res)), assayName="norm", top_annotation = c("condition", "depth"))
+```
+
+## comparing male and female animals
+
+```{r}
+genome <- BSgenome.Mmusculus.UCSC.mm10::BSgenome.Mmusculus.UCSC.mm10 # because I had windows-related problems with the other genome
+seqlevelsStyle(peak_counts_SE) = "UCSC"
+se <- suppressWarnings(chromVAR::addGCBias(peak_counts_SE, genome=genome))
+moi <- suppressWarnings(motifmatchr::matchMotifs(motifs, subject=se, genome=genome))
+
+se
+colData(se)$condition <- c("F","F","F","M","M","M","F","F","F","M","M","M")
+se$condition <- c("F","F","F","M","M","M","F","F","F","M","M","M")
+colData(se)
+rowRanges(se)$test <- 3
+rowRanges(se)
+
+#moi <- motifmatchr::matchMotifs(motifs, subject=peak_counts_SE, genome=genome_fa)
+dev <- chromVAR::computeDeviations(object = se, annotations=moi,
+                                   background_peaks=getBackgroundPeaks(se, niterations=1000))
+dev
+colData(dev)
+variability <- computeVariability(dev)
+plotVariability(variability)
+
+head(assays(dev)$z)
+assays(dev)$norm <- scale(assays(dev)$z)
+dev
+
+# differential analysis
+dev$condition
+# if needed, we can specify the baseline condition, by default it's the first in alphabetical order
+dev$condition <- factor(dev$condition)
+mm <- model.matrix(~dev$condition)
+
+fit <- eBayes(lmFit(assays(dev)$norm, mm))
+res <- as.data.frame(topTable(fit, coef="dev$conditionM", number = Inf))
+head(res)
+
+res$TF <- row.names(res)
+ggplot(res, aes(logFC, -log10(adj.P.Val), label=TF)) + geom_text()
+
+sechm(dev, features = head(row.names(res)), assayName="norm", top_annotation = c("condition", "depth"))
+```
+
+# For each analysis, report the top most significant motifs, plot a heatmap of the normalized accessibility scores across the samples for those motifs, and write a short paragraph interpreting the results.
+
+## comparing stressed (denoted ‘FSS’ – forced swim stress) and control animals
+
+The heatmap has been produced in the previous section. As we can observe, the most significant motifs, i.e. those that differ most strongly between the stressed and the control condition are NR1|3, MSX2, GCR, PRGR, ANDR, and another GCR. The logFC column indicates how much is the log full change in the stressed condition compared to the reference control, and the p-value tells how much this is significant.
+
+## comparing male and female animals
+
+The heatmap has been produced in the previous section. As we can observe, the most significant motifs, i.e. those that differ most strongly between the stressed and the control condition are TYY1, TEAD1, RUNX3, MYB, ZN143, and another PTF1A. The logFC column indicates how much is the log full change in the males compared to the females, and the p-value tells how much this is significant.
+
+# There I tried to do both analyses in the same test (should be better statistically)
+
+```{r}
+genome <- BSgenome.Mmusculus.UCSC.mm10::BSgenome.Mmusculus.UCSC.mm10 # because I had windows-related problems with the other genome
+seqlevelsStyle(peak_counts_SE) = "UCSC"
+se <- suppressWarnings(chromVAR::addGCBias(peak_counts_SE, genome=genome))
+moi <- suppressWarnings(motifmatchr::matchMotifs(motifs, subject=se, genome=genome))
+
+se
+colData(se)$sex <- c("F","F","F","M","M","M","F","F","F","M","M","M")
+se$sex <- c("F","F","F","M","M","M","F","F","F","M","M","M")
+colData(se)$condition <- c("CTRL","CTRL","CTRL","CTRL","CTRL","CTRL","FSS","FSS","FSS","FSS","FSS","FSS")
+se$condition <- c("CTRL","CTRL","CTRL","CTRL","CTRL","CTRL","FSS","FSS","FSS","FSS","FSS","FSS")
+colData(se)
+rowRanges(se)$test <- 3
+rowRanges(se)
+
+#moi <- motifmatchr::matchMotifs(motifs, subject=peak_counts_SE, genome=genome_fa)
+dev <- chromVAR::computeDeviations(object = se, annotations=moi,
+                                   background_peaks=getBackgroundPeaks(se, niterations=1000))
+dev
+colData(dev)
+variability <- computeVariability(dev)
+plotVariability(variability)
+
+head(assays(dev)$z)
+assays(dev)$norm <- scale(assays(dev)$z)
+dev
+
+# differential analysis
+dev$condition
+dev$sex
+# if needed, we can specify the baseline condition, by default it's the first in alphabetical order
+dev$condition <- factor(dev$condition)
+dev$condition <- relevel(dev$condition, "CTRL")
+dev$sex <- factor(dev$sex)
+mm <- model.matrix(~dev$condition+dev$sex)
+
+fit <- eBayes(lmFit(assays(dev)$norm, mm))
+res_c <- as.data.frame(topTable(fit, coef="dev$conditionFSS", number = Inf))
+head(res_c)
+
+res_c$TF <- row.names(res_c)
+ggplot(res_c, aes(logFC, -log10(adj.P.Val), label=TF)) + geom_text()
+
+sechm(dev, features = head(row.names(res_c)), assayName="norm", top_annotation = c("condition", "depth"))
+
+res_s <- as.data.frame(topTable(fit, coef="dev$sexM", number = Inf))
+head(res_s)
+
+res_s$TF <- row.names(res_s)
+ggplot(res_s, aes(logFC, -log10(adj.P.Val), label=TF)) + geom_text()
+
+sechm(dev, features = head(row.names(res_s)), assayName="norm", top_annotation = c("sex", "depth"))
+```
+
+This analysis takes into account the condition and the sex in the same statistical test, which statistically should help the model "see" some effects taking into account other effects. This explains that the results are slightly different than in the previous analysis. In this test, the motifs that most greatly differ between stressed and control condition are BHE41, MSX2, NR1|3, GCR, ANDR, and PRGR, while those that most strongly differ between the two sexes are PTF1A, MYB, RUNX3, ZN143, TEAD1, and TYY1. Again, the logFC column indicates how much is the log full change between conditions/ sexes (one compared to the reference), and the p-value tells how much this is significant. How strong the difference is can also be seen in the plot.
