@@ -1,0 +1,77 @@
+---
+title: "Assignment 9"
+author: "Jan Matthias, Laura Fusi, Vanessa Löw"
+date: "2023-05-09"
+output: html_document
+---
+```{r}
+library(readxl)
+```
+
+
+
+
+Project 2 
+
+ 
+
+Rats were assigned to a forced swimming test to trigger a stress response (FS30). Control group consisted of animals killed in the morning (BLAM), another group was made up of animals killed in the evening (no control – BLPM) FS30 and BLPM were compared to controls. Hippocampal tissue was removed and used to construct a CHIP-Seq library of the three conditions. Additionally also a RNA analysis was performed, at BLAM, FS30, FS60, FS120, FS180, FS360, and BLPM.  
+
+ 
+
+## 1. What is the project? 
+
+Reanalysis of GCR (glucocorticoid receptor) and MR (mineral corticoid receptor) binding in the hippocampus, both at resting state and upon stress 
+
+We will be using the data from the paper (https://www.nature.com/articles/s41467-021-24967-z) and try to re-do the analysis of the paper, and where possible add new parts  
+
+ 
+
+  
+
+## 2. What data will you be using? 
+
+ 
+
+For the Chip-seq: it has already been filtered and pre-processed and is available to us in the Narrowpeak format.  
+
+There are different replicates for each Chip-GR-, what does this mean? 
+They are for the different conditions at different times during the day, each condition has been measured 4 times, in total 12 samples.  
+
+```{r}
+project <- read_xlsx("project.xlsx")
+project
+```
+
+
+There is also different RNA from the mouse, during different times of the day and different time points after the forced swim test (FS120-, FS180- and FS360) 
+à this has been used in the paper, to identify the correlation between MR and GR binding and inRNA. They calculated the correlation with Spearman’s coefficient,  
+
+  
+
+ We will be using the data from the paper:  
+
+Mifsud, K. R., Kennedy, C. L. M., Salatino, S., Sharma, E., Price, E. N., Haque, S. N., Gialeli, A., Goss, H. M., Panchenko, P., Broxholme, J., Engledow, S., Lockstone, H., Cordero-Llana, O., & Reul, J. M. H. M. (2021). Distinct regulation of hippocampal neuroplasticity and ciliary genes by corticosteroid receptors. Nature Communications, 12(1). https://doi.org/10.1038/s41467-021-24967-z 
+
+  
+
+## 3. What are the analyses you wish to reproduce, or the questions you wish to answer? 
+
+ 
+
+Which regions of the genome are regulated only by GCR? Which only by MR? Which ones by both? --> overlaps 
+
+Are these genes also related to neuropsychiatric diseases? 
+
+What is the difference between resting state and stress condition? Is one of the two factors explaining most of the difference, or is it the combination of that makes the differences possible? --> differential analysis 
+
+Is there any difference between different daytimes? 
+
+Is the expression of these factors different? Is the binding of these factors different? 
+
+They used various statistical methods, such as ANOVAs, Fisher Test, and Spearman coefficient, which could be interesting to check if they are correctly used. Are the assumptions, such as normality, respected? 
+
+Characterization of typical MR-only- and MR-&-GR-regulated genes? 
+à they did this in ciliary structure/function and neuroplasticity genes, why? Most likely because they had the most significant change in the previous graph. Could we also do this for other genes? Why yes, or no? 
+
+ 
