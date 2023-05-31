@@ -1,0 +1,123 @@
+---
+title: "Assignment 12"
+author: "Laura Fusi"
+date: "2023-05-26"
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(GenomicRanges)
+  library(AnnotationHub)
+  library(ensembldb)
+  library(InteractionSet)
+  library(epiwraps)
+})
+```
+
+# Choose a transcription factor (e.g. p300), and obtain peaks from ENCODE (ChIP-seq in a human context!)
+
+```{r}
+# p300 peaks in A549 cells:
+download.file("https://www.encodeproject.org/files/ENCFF776TFX/@@download/ENCFF776TFX.bed.gz", "p300.narrowPeak.gz")
+# Hi-C long-range interactions in A549 cells:
+download.file("https://www.encodeproject.org/files/ENCFF803ZOW/@@download/ENCFF803ZOW.tsv", "interactions.tsv")
+```
+
+```{r}
+p300_peaks <- rtracklayer::import("p300.narrowPeak.gz", format="narrowPeak")
+p300_peaks
+```
+
+# Isolate the peaks that are:
+
+```{r, warning = FALSE}
+ah <- AnnotationHub(localHub=TRUE)
+ensdb <- ah[["AH95744"]]
+
+annotatedPeaks <- epiwraps::annotateRegions(p300_peaks, ensdb)
+annotatedPeaks
+```
+
+## Between 2.5kb and 10kb from a TSS
+
+```{r}
+peaks_set_1 <- annotatedPeaks[annotatedPeaks$distance2nearestTSS < 10000]
+peaks_set_1 <- peaks_set_1[peaks_set_1$distance2nearestTSS > 2500]
+peaks_set_1
+```
+
+## More than 10kb from a TSS
+
+```{r}
+peaks_set_2 <- annotatedPeaks[annotatedPeaks$distance2nearestTSS > 10000]
+peaks_set_2
+```
+
+# For each set of peaks:
+
+## Subset to those peaks that have a predicted distal target(s) using Salviato et al. (2021)
+
+* You can download a GRanges of those interactions at https://ethz-ins.org/content/hg38.SalviatoDistalEnhancerTargets.GR.rds
+
+```{r}
+download.file("https://ethz-ins.org/content/hg38.SalviatoDistalEnhancerTargets.GR.rds", "interactions.rds")
+interactions <- readRDS("interactions.rds")
+interactions
+```
+
+### For set 1 (between 2.5kb and 10kb from a TSS)
+
+```{r}
+o1 <- findOverlaps(peaks_set_1, interactions)
+mcols(peaks_set_1)[from(o1),"target"] <- interactions[to(o1)]$target
+mcols(peaks_set_1)$target <- CharacterList(mcols(peaks_set_1)$target)
+subset1 <- peaks_set_1[unique(from(o1))]
+subset1
+```
+
+### For set 2 (more than 10kb from a TSS)
+
+```{r}
+o2 <- findOverlaps(peaks_set_2, interactions)
+mcols(peaks_set_2)[from(o2),"target"] <- interactions[to(o2)]$target
+mcols(peaks_set_2)$target <- CharacterList(mcols(peaks_set_2)$target)
+subset2 <- peaks_set_2[unique(from(o2))]
+subset2
+```
+
+## Find the nearest TSS for each peak
+
+* Hint: you can use the annotateRegions function, as we did in week 4, to get the gene nearest to each peak
+
+### For set 1 (between 2.5kb and 10kb from a TSS)
+
+```{r}
+subset1$target
+```
+
+### For set 2 (more than 10kb from a TSS)
+
+```{r}
+subset2$target
+```
+
+## In what proportion of the cases is the predicted target the closest gene?
+
+* Hint: beware not to count, when calculating proportions, peaks that don’t have interactions with any TSS!
+* Expected for of the answer: “Of the genes that are between 2.5 and 10kb from the nearest TSS, XX % form an interaction with that nearest gene. Of the genes that are more than 10kb away from the nearest TSS, XX % form an interaction with that nearest gene.”
+
+### For set 1 (between 2.5kb and 10kb from a TSS)
+
+```{r}
+sum(any(subset1$nearestTSS.gene_name == subset1$target))/length(subset1)
+```
+Of the genes that are between 2.5 and 10kb from the nearest TSS, ca. 9.7 % form an interaction with that nearest gene.
+
+### For set 2 (more than 10kb from a TSS)
+
+```{r}
+sum(any(subset2$nearestTSS.gene_name == subset2$target))/length(subset2)
+```
+Of the genes that are more than 10kb away from the nearest TSS, 6.7 % form an interaction with that nearest gene.
+
